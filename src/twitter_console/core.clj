@@ -15,7 +15,7 @@
 ;;; Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 
 (ns twitter_console.core
-  (:import (twitter4j TwitterFactory TwitterException Paging))
+  (:import (twitter4j TwitterFactory TwitterException Paging Query))
   (:import (twitter4j.conf ConfigurationBuilder))
   (:require [clojure.java.io :as io]
             [clojure.string :as str]
@@ -27,16 +27,19 @@
 ;; ==================================================
 
 (def cli-options
-  [["-s" "--session SESSION"   "Session name to identify this process"]
-   ["-t" "--timeline"          "Timeline mode"]
+  [["-h" "--help"]
    ["-i" "--interval INTERVAL" "Interval minutes to reload"
     :default 20
     :parse-fn #(Integer/parseInt %)]
-   ["-h" "--help"]])
+   ["-q" "--query QUERY"       "Query mode"]
+   ["-r" "--rate-limit"        "Show all the current rate limit information"]
+   ["-s" "--session SESSION"   "Session name to identify this process"]
+   ["-t" "--timeline"          "Timeline mode"] ])
 
 ;; Holds commandline options
 (def opts (atom {}))
 
+;; How many statues to get in a batch. Max 200.
 (def PAGING_COUNT 200)
 
 ;; ==================================================
@@ -44,6 +47,7 @@
 ;; ==================================================
 
 (defn println-err
+  "Print str to stderr."
   [str]
   (binding [*out* *err*]
     (println str)))
@@ -74,36 +78,44 @@
      (.getInstance (TwitterFactory. (.build conf))))))
 
 (defn file-last-id
+  "Returns a File instance to hold the last id."
   []
   (io/file "/var/tmp" (str "simple_twitter_client_" (:session @opts))))
 
 (defn check-last-id
+  "Loads and returns the last id. If a file does not exist, returns 0."
   []
-  (let [file (file-last-id)]
+  (let [file ^java.io.File (file-last-id)]
     (if (.exists file)
       (Long/parseLong (slurp file))
       0)))
 
 (defn save-last-id
+  "Saves the last id to a specific file."
   [last-id]
   (spit (file-last-id) last-id))
 
-(defn next-paging
-  [paging]
-  (doto paging
-    (.setPage  (inc (.getPage paging)))))
+(defn clear-last-id
+  "Delete the last id file"
+  []
+  (let [file ^java.io.File (file-last-id)]
+    (if (.exists file)
+      (.delete file))))
+
+(defn max-id
+  [xs]
+  (.getId ^twitter4j.Status (first xs)))
+
+(defn next-max-id
+  [xs]
+  (dec (.getId ^twitter4j.Status (last xs))))
 
 (defn getHomeTimeline
-  [twitter paging]
-  (lazy-cat (.getHomeTimeline twitter paging) 
-   (getHomeTimeline twitter
-                    (next-paging paging))))
-
-(defn getHomeTimeline
-  ([twitter]
+  "Returns a sequence of statuses of home timeline."
+  ([^twitter4j.Twitter twitter]
    (let [paging (Paging. 1 PAGING_COUNT)]
      (.getHomeTimeline twitter paging)))
-  ([twitter since-id]
+  ([^twitter4j.Twitter twitter since-id]
    (let [paging (Paging. 1 PAGING_COUNT since-id)
          col    (.getHomeTimeline twitter paging)]
      (if (empty? col)
@@ -111,9 +123,9 @@
        (getHomeTimeline twitter
                         col
                         since-id
-                        (dec (.getId (last col)))
-                        (.getId (first col))))))
-  ([twitter xs since-id max-id last-id]
+                        (next-max-id col)
+                        (max-id col)))))
+  ([^twitter4j.Twitter twitter xs since-id max-id last-id]
    (if (<= max-id since-id)
      xs
      (let [paging (Paging. 1 PAGING_COUNT since-id max-id)
@@ -123,26 +135,75 @@
          (recur twitter
                  (concat xs col)
                  since-id
-                 (dec (.getId (last col)))
+                 (next-max-id col)
                  last-id))))))
 
+(defn getQuery
+  ""
+  ([^twitter4j.Twitter twitter search-str]
+   (let [query (doto (Query. search-str)
+                 (.setCount PAGING_COUNT))]
+     (-> (.search twitter query)
+       .getTweets)))
+  ([^twitter4j.Twitter twitter search-str since-id]
+   (let [query  (doto (Query. search-str)
+                  (.setCount PAGING_COUNT)
+                  (.setSinceId since-id))
+         tweets (-> (.search twitter query) .getTweets)]
+     (if (empty? tweets)
+       []
+       (getQuery twitter
+                 search-str
+                 tweets
+                 since-id
+                 (next-max-id tweets)
+                 (max-id tweets)))))
+  ([^twitter4j.Twitter twitter search-str xs since-id max-id last-id]
+   (println-err (format "Reading %d   %d..%d" last-id since-id max-id))
+   (if (<= max-id since-id)
+     xs
+     (let [query  (doto (Query. search-str)
+                    (.setCount PAGING_COUNT)
+                    (.setSinceId since-id)
+                    (.setMaxId max-id))
+           tweets (-> (.search twitter query) .getTweets)]
+       (if (empty? tweets)
+         xs
+         (recur twitter
+                search-str
+                (concat xs tweets)
+                since-id
+                (next-max-id tweets)
+                last-id))))))
+
+(defn show-all-rate-limit
+  "Dumps all the current rate limit information."
+  [^twitter4j.Twitter twitter]
+  (let [m (.getRateLimitStatus twitter)]
+    (doseq [k (sort (keys m))]
+      (println k ", " (get m k)))))
+
 (defn getRateLimit
-  [twitter resource]
-  (let [status (get (.getRateLimitStatus twitter) "/statuses/home_timeline")]
+  "Returns a map denoting rate limit information."
+  [^twitter4j.Twitter twitter resource]
+  (let [status ^twitter4j.RateLimitStatus (get (.getRateLimitStatus twitter)
+                                               "/statuses/home_timeline")]
     {:limit (.getLimit status)
      :remaining (.getRemaining status)
      :resetTimeInSeconds (.getResetTimeInSeconds status)
      :secondsUntilReset  (.getSecondsUntilReset status)}))
 
 (defn str-name
-  [status]
-  (let [user (.getUser status)]
+  "Returns a string representing a user name for a Status"
+  [^twitter4j.Status status]
+  (let [user ^twitter4j.User (.getUser status)]
     (format "%s @%s"
             (.getName user)
             (.getScreenName user))))
 
 (defn println-message
-  [status]
+  "Returns a formatted string representing a tweet message."
+  [^twitter4j.Status status]
   (if (.isRetweet status)
     (println (format ">>> (x%d retweeted by %s) %s [%s]"
                      (.getRetweetCount status)
@@ -154,13 +215,17 @@
                      (-> (.getCreatedAt status) .toString))))
   (println (.getText status)))
 
-(defn domain
-  [twitter]
-  (let [rate-limit (getRateLimit twitter "/statuses/home_timeline")]
+(defn check-and-wait-rate-limit
+  [^twitter4j.Twitter twitter resource]
+  (let [rate-limit (getRateLimit twitter resource)]
     (when-not (pos? (:remaining rate-limit))
       (println-err (format "Rate limit has run out. Sleep in %s seconds..."
                           (:secondsUntilReset rate-limit)))
-      (Thread/sleep (* 1000 (+ 10 (:secondsUntilReset rate-limit))))))
+      (Thread/sleep (* 1000 (+ 10 (:secondsUntilReset rate-limit)))))))
+
+(defn do-timeline
+  [^twitter4j.Twitter twitter]
+  (check-and-wait-rate-limit twitter "/statuses/home_timeline")
   (try
     (let [last-id (check-last-id)
           xstatus (if (pos? last-id)
@@ -168,11 +233,39 @@
                     (getHomeTimeline twitter))]
       (when-not (empty? xstatus)
         (dorun (map println-message (reverse xstatus)))
-        (save-last-id (-> (first xstatus) .getId))))
+        (save-last-id (.getId ^twitter4j.Status (first xstatus)))))
+    (catch TwitterException ex
+      (println-err ex)
+      (when (= 429 (.getErrorCode ex))
+        (println "### Rate limt has been exhausted, probably due to too much tweets to be retreived.")
+        (println "### The last id has been cleared. There might be a gap in tweets you receive.")
+        (clear-last-id)))
     (catch Exception ex
       (println-err ex)))
   (Thread/sleep (* 1000 60 (:interval @opts)))
   (recur twitter))
+
+(defn do-query
+  [^twitter4j.Twitter twitter search-str]
+  (check-and-wait-rate-limit twitter "/search/tweets")
+  (try
+    (let [last-id (check-last-id)
+          xstatus (if (pos? last-id)
+                    (getQuery twitter search-str last-id)
+                    (getQuery twitter search-str))]
+      (when-not (empty? xstatus)
+        (dorun (map println-message (reverse xstatus)))
+        (save-last-id (.getId ^twitter4j.Status (first xstatus)))))
+    (catch TwitterException ex
+      (println-err ex)
+      (when (= 429 (.getErrorCode ex))
+        (println "### Rate limt has been exhausted, probably due to too much tweets to be retrived.")
+        (println "### The last id has been cleared. There might be a gap in tweets you receive.")
+        (clear-last-id)))
+    (catch Exception ex
+      (println-err ex)))
+  (Thread/sleep (* 1000 60 (:interval @opts)))
+  (recur twitter search-str))
 
 (defn usage
   [options-summary]
@@ -200,4 +293,8 @@
       (empty? (:session @opts)) (exit 1 (str "ERROR: --session is required.\n\n"
                                              (usage summary)))
       errors                    (exit 1 (error-msg errors)))  
-    (domain (twitter-instance))))
+    (cond
+      (:timeline @opts)   (do-timeline (twitter-instance))
+      (:query @opts)      (do-query (twitter-instance) (:query @opts))
+      (:rate-limit @opts) (show-all-rate-limit (twitter-instance))
+      :else               (exit 1 (usage summary)))))

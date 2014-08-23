@@ -1,4 +1,4 @@
-(defproject twitter_console "0.1.0"
+(defproject twitter_console "0.2.0"
   :description "Simple Twitter command-line client that monitors tweets and shows them to
 stdout, which allows you to save your timeline into a file."
   :url "https://github.com/daigo/simple-twitter-console"
@@ -9,5 +9,7 @@ stdout, which allows you to save your timeline into a file."
                  [org.clojure/tools.logging "0.3.0"]
                  [org.twitter4j/twitter4j-core "4.0.2"]
                  [org.twitter4j/twitter4j-stream "4.0.2"]]
+  :global-vars {*warn-on-reflection* true
+                *assert* false}
   :aot [twitter_console.core]
   :main twitter_console.core)
