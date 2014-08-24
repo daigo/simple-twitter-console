@@ -31,8 +31,8 @@ When you run multiple processes, say to monitor several search keywords,
 assign unique session names for each process.
 
 ```
-% java -jar twitter-console-0.1.0-standalone.jar --session timeline --timeline | tee -a timeline.txt
-% java -jar twitter-console-0.1.0-standalone.jar --session clojure --query clojure | tee -a clojure.txt
+% java -jar twitter_console-0.2.0-standalone.jar --session timeline --timeline | tee -a timeline.txt
+% java -jar twitter_console-0.2.0-standalone.jar --session clojure --query clojure | tee -a clojure.txt
 ```
 
 ## How to Compile
