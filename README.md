@@ -26,7 +26,7 @@ The application has two modes:
 ### Bookmark and Session Name
 
 The application saves a kind of bookmark for messages you have already
-retrieved in a file located at $HOME/.simple_twitter_client/_session_name_.
+retrieved in a file located at $HOME/.simple_twitter_console/_session_name_.
 When you run multiple processes, say to monitor several search keywords,
 assign a unique session name for each process.
 

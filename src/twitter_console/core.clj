@@ -81,7 +81,7 @@
   "Returns a File instance to hold the last id."
   []
   (let [home (get (System/getenv) "HOME")
-        dir  (io/file home ".simple_twitter_client")]
+        dir  (io/file home ".simple_twitter_console")]
     (if-not (.exists dir)
       (.mkdir dir))
     (io/file dir (:session @opts))))
