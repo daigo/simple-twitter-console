@@ -80,7 +80,11 @@
 (defn file-last-id
   "Returns a File instance to hold the last id."
   []
-  (io/file "/var/tmp" (str "simple_twitter_client_" (:session @opts))))
+  (let [home (get (System/getenv) "HOME")
+        dir  (io/file home ".simple_twitter_client")]
+    (if-not (.exists dir)
+      (.mkdir dir))
+    (io/file dir (:session @opts))))
 
 (defn check-last-id
   "Loads and returns the last id. If a file does not exist, returns 0."

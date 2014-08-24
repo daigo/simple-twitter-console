@@ -1,4 +1,4 @@
-(defproject twitter_console "0.2.0"
+(defproject twitter_console "0.2.1"
   :description "Simple Twitter command-line client that monitors tweets and shows them to
 stdout, which allows you to save your timeline into a file."
   :url "https://github.com/daigo/simple-twitter-console"

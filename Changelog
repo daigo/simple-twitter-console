@@ -1,0 +1,9 @@
+2014-08-24  Daigo Moriwaki <daigo at debian dot org>
+
+	* Bookmark file is now located at
+	  $HOME/.simple_twitter_console/<session_name> rather than /var/tmp/.
+	* tag v0.2.1.
+
+2014-08-24  Daigo Moriwaki <daigo at debian dot org>
+
+	* Initial version: v0.2.0

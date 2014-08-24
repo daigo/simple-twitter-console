@@ -26,13 +26,13 @@ The application has two modes:
 ### Bookmark and Session Name
 
 The application saves a kind of bookmark for messages you have already
-retrieved in a file located at /var/tmp/simple_twitter_client_<session_name>.
+retrieved in a file located at $HOME/.simple_twitter_client/_session_name_.
 When you run multiple processes, say to monitor several search keywords,
-assign unique session names for each process.
+assign a unique session name for each process.
 
 ```
-% java -jar twitter_console-0.2.0-standalone.jar --session timeline --timeline | tee -a timeline.txt
-% java -jar twitter_console-0.2.0-standalone.jar --session clojure --query clojure | tee -a clojure.txt
+% java -jar twitter_console-0.2.1-standalone.jar --session timeline --timeline | tee -a timeline.txt
+% java -jar twitter_console-0.2.1-standalone.jar --session clojure --query clojure | tee -a clojure.txt
 ```
 
 ## How to Compile
